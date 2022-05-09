@@ -1,0 +1,153 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% YAZAR: MEHMET EMİN KONUK
+%% PROTOKOL: TLS: Transport Layer Security (Taşıma Katmanı Güvenliği)
+%% **Bu spesifikasyon TLS protokolünün AVISPA için kısaltılmış bir versiyonudur**
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+role alice(A, B : agent,  
+	   H, PRF, KeyGen: hash_func,
+	   Ka, Ks: public_key,  %% Ks açık anahtar
+	   SND, RCV: channel (dy))
+played_by A
+def=
+
+   local Na, Sid, Pa, PMS: text,
+         Nb: text,
+         State: nat,
+         Finished: hash(hash(text.text.text).agent.agent.text.text.text),
+         ClientK, ServerK: hash(agent.text.text.hash(text.text.text)),
+         Kb: public_key,
+         M: hash(text.text.text)
+
+   const sec_clientk, sec_serverk : protocol_id
+
+   init  State := 0
+
+   transition
+
+   1.  State = 0
+       /\ RCV(start)
+       =|>
+       State' := 2
+       /\ Na' := new()
+       /\ Pa' := new()
+       /\ Sid' := new()
+       /\ SND(A.Na'.Sid'.Pa')
+
+   % Kısaltılmış versiyon olduğu için sunucu direkt Pa'yı geri gönderiyor.
+   2.  State = 2
+       /\ RCV(Nb'.Sid.Pa.{B.Kb'}_(inv(Ks)))
+       =|>
+       State' := 3
+       /\ PMS' := new()
+       /\ M' := PRF(PMS'.Na.Nb')
+       /\ Finished' := H(PRF(PMS'.Na.Nb').A.B.Na.Pa.Sid)
+       /\ ClientK' := KeyGen(A.Na.Nb'.PRF(PMS'.Na.Nb'))
+       /\ ServerK' := KeyGen(B.Na.Nb'.PRF(PMS'.Na.Nb'))
+       /\ SND({PMS'}_Kb'.
+              {A.Ka}_(inv(Ks)).
+              {H(Nb'.B.PMS')}_(inv(Ka)).
+              {H(PRF(PMS'.Na.Nb').
+               A.B.Na.Pa.Sid)
+              }_KeyGen(A.Na.Nb'.PRF(PMS'.Na.Nb')))
+       /\ witness(A,B,na_nb2,Na.Nb')
+
+   4.  State = 3
+       /\ RCV({Finished}_ServerK)
+       =|>
+       State' := 5
+       /\ request(A,B,na_nb1,Na.Nb)
+       /\ secret(ClientK,sec_clientk,{A,B})
+       /\ secret(ServerK,sec_serverk,{A,B})
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role bob(A, B : agent,
+    	 H, PRF, KeyGen: hash_func,
+	 Kb, Ks: public_key,
+	 SND, RCV: channel (dy))
+played_by B
+def=
+
+   local Na, Nb, Sid, Pa, PMS: text,
+         State: nat,
+         Ka: public_key
+
+   init  State := 1
+
+   transition
+
+   1.  State = 1
+       /\ RCV(A.Na'.Sid'.Pa')
+       =|>
+       State' := 3
+       /\ Nb' := new()
+       /\ SND(Nb'.Sid'.Pa'.{B.Kb}_(inv(Ks)))
+       /\ witness(B,A,na_nb1,Na'.Nb')
+
+   2.  State = 3
+       /\ RCV({PMS'}_Kb.{A.Ka'}_(inv(Ks)).
+              {H(Nb.B.PMS')}_(inv(Ka')).
+              {H(PRF(PMS'.Na.Nb).
+               A.B.Na.Pa.Sid)
+              }_KeyGen(A.Na.Nb.PRF(PMS'.Na.Nb)))
+       =|>
+       State' := 5
+       /\ SND({H(PRF(PMS'.Na.Nb).
+               A.B.Na.Pa.Sid)
+              }_KeyGen(B.Na.Nb.PRF(PMS'.Na.Nb)))
+       /\ request(B,A,na_nb2,Na.Nb)
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role session(A,B: agent,
+	     Ka, Kb, Ks: public_key,
+	     H, PRF, KeyGen: hash_func)
+def=
+
+   local  SA, SB, RA, RB: channel (dy)
+
+   composition
+		alice(A,B,H,PRF,KeyGen,Ka,Ks,SA,RA)
+	   /\	bob(A,B,H,PRF,KeyGen,Kb,Ks,SB,RB)
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role environment()
+def=
+
+   const na_nb1, na_nb2 : protocol_id,
+         h, prf, keygen : hash_func,
+         a, b           : agent,
+         ka, kb, ki, ks : public_key
+
+   intruder_knowledge = { a, b, ka, kb, ks, ki, inv(ki),
+                          {i.ki}_(inv(ks)) }
+
+   composition
+	session(a,b,ka,kb,ks,h,prf,keygen)
+    /\	session(a,i,ka,ki,ks,h,prf,keygen)
+    /\	session(i,b,ki,kb,ks,h,prf,keygen)
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+goal
+  %Gizlilik hedefi için server ve client'in güvenlikleri
+  secrecy_of sec_clientk,sec_serverk 
+  %Alice na_nb1 ile Bob'un kimliğini doğrular
+  authentication_on na_nb1 
+  %Bob na_nb2 ile Alice'in kimliğini doğrular
+  authentication_on na_nb2 
+
+end goal
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+environment()
