@@ -1,0 +1,59 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% YAZAR: MEHMET EMİN KONUK
+%% PROTOKOL: Diffie-Hellman Anahtar Değişimi Protokolü
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+role role_A(A:agent,B:agent,D:text,E:text,N:text,SND,RCV:channel(dy))
+played_by A
+def=
+	local
+		State:nat,D:text,E:text,N:text,Secret:text
+	init
+		State := 0
+	transition
+		
+		1. State=0 /\ RCV(start) =|> State':=1 /\ E:=new() /\ SND(E)
+		2. State=1 /\ RCV(D) =|> State' := 2 /\ Secret' :=new() /\ secret(Secret',sec_1,{A,B}) /\ SND({Secret'}_exp(exp(Secret),E))
+end role
+
+role role_B(A:agent,B:agent,D:text,E:text,N:text,SND,RCV:channel(dy))
+played_by B
+def=
+	local
+		State:nat,D:text,E:text,Secret:text
+	init
+		State := 0
+	transition
+		1. State=0 /\ RCV(E) =|> State':=1 /\ D :=E /\ SND(D)
+		3. State=1 /\ RCV({Secret'}_exp(exp(Secret),E)) =|> State':=2 /\ secret(Secret',sec_1,{A,B})/\ SND({Secret'}_exp(exp(Secret),D) )
+end role
+
+role session1(A:agent,B:agent,D:text,E:text,N:text)
+def=
+	local
+		SND2,RCV2,SND1,RCV1:channel(dy)
+	composition
+		role_B(A,B,D,E,N,SND2,RCV2) /\ role_A(A,B,D,E,N,SND1,RCV1)
+end role
+
+role session2(A:agent,B:agent,D:text,D:text,N:text)
+def=
+	local
+		SND2,RCV2,SND1,RCV1:channel(dy)
+	composition
+		role_B(A,B,D,E,N,SND2,RCV2) /\ role_A(A,B,D,E,N,SND1,RCV1)
+end role
+
+role environment()
+def=
+	const
+		bob:agent,hash_0:hash_func,alice:agent,D:text,E:text,N:text,sec_1:protocol_id
+	intruder_knowledge = {alice,bob,D,E,N}
+	composition
+		session2(i,bob,D,E) /\ session1(alice,bob,D,E)
+end role
+
+goal
+	secrecy_of sec_1
+end goal
+
+environment()
